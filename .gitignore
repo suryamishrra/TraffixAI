@@ -1,5 +1,5 @@
-*.pt
-*.mp4
+# *.pt
+# *.mp4
 *.jpg
 *.jpeg
 *.png
@@ -12,3 +12,9 @@ node_modules
 .env
 
 TraffixAI-HF/
+
+
+*.pt
+*.mp4
+*.onnx
+*.zip
