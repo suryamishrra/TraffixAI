@@ -1,7 +1,6 @@
 """
 TrafficAI FastAPI Backend
-Run (local): uvicorn backend.traffic_api:app --reload
-Run (prod):  uvicorn backend.traffic_api:app --host 0.0.0.0 --port 10000
+HF Docker Port: 7860
 """
 
 import io
@@ -9,8 +8,10 @@ import os
 import cv2
 import numpy as np
 from datetime import datetime
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from PIL import Image
 from ultralytics import YOLO
@@ -31,7 +32,9 @@ current_status = {
 # ============================================================
 # FASTAPI APP
 # ============================================================
-app = FastAPI(title="TrafficAI Backend", version="2.0.0")
+app = FastAPI(title="TrafficAI Backend", version="3.0.0")
+
+templates = Jinja2Templates(directory="backend/templates")
 
 app.add_middleware(
     CORSMiddleware,
@@ -105,11 +108,11 @@ class TrafficAnalyzer:
 analyzer = TrafficAnalyzer()
 
 # ============================================================
-# ROOT
+# HOME PAGE (UPLOAD UI)
 # ============================================================
-@app.get("/")
-async def root():
-    return {"message": "TrafficAI Backend Running 🚦"}
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 # ============================================================
 # TRAFFIC ANALYZE API
@@ -134,14 +137,13 @@ async def analyze_traffic(file: UploadFile = File(...)):
         raise HTTPException(400, f"Image Error: {str(e)}")
 
 # ============================================================
-# TOLL FUNCTION
+# TOLL SYSTEM
 # ============================================================
 def handle_toll(vehicle_number):
     current_time = datetime.now()
 
     if vehicle_number not in vehicle_records:
         vehicle_records[vehicle_number] = current_time
-
         current_status["last_plate"] = vehicle_number
         current_status["toll_status"] = "Entry Recorded"
         current_status["vehicle_count"] += 1
@@ -175,7 +177,7 @@ def handle_toll(vehicle_number):
     current_status["toll_status"] = "Exit Completed"
     current_status["vehicle_count"] -= 1
 
-    data = {
+    return {
         "status": "exit_completed",
         "vehicle_number": vehicle_number,
         "entry_time": str(entry),
@@ -184,31 +186,13 @@ def handle_toll(vehicle_number):
         "toll_amount": toll
     }
 
-    toll_history.append({
-        "vehicle_number": vehicle_number,
-        "entry_time": str(entry),
-        "exit_time": str(current_time),
-        "status": "Exit",
-        "toll_amount": toll
-    })
-
-    return data
-
-# ============================================================
-# AI TOLL API
-# ============================================================
 @app.post("/ai/toll")
 async def ai_toll_update(data: dict = Body(...)):
     vehicle_number = data.get("plate")
-
     if not vehicle_number:
         raise HTTPException(400, "Plate not provided")
-
     return handle_toll(vehicle_number)
 
-# ============================================================
-# DASHBOARD STATUS
-# ============================================================
 @app.get("/status")
 async def get_status():
     return current_status
@@ -216,15 +200,3 @@ async def get_status():
 @app.get("/toll-history")
 async def toll_history_api():
     return toll_history
-
-# ============================================================
-# FRONTEND STATUS UPDATE
-# ============================================================
-@app.post("/update-status")
-async def update_status(data: dict = Body(...)):
-    global current_status
-    current_status["vehicle_count"] = data.get("vehicle_count", current_status["vehicle_count"])
-    current_status["traffic_status"] = data.get("traffic_status", current_status["traffic_status"])
-    current_status["last_plate"] = data.get("last_plate", current_status["last_plate"])
-    current_status["toll_status"] = data.get("toll_status", current_status["toll_status"])
-    return {"message": "Status updated", "data": current_status}
