@@ -1,9 +1,11 @@
 """
 TrafficAI FastAPI Backend
-Run: uvicorn backend.traffic_api:app --reload
+Run (local): uvicorn backend.traffic_api:app --reload
+Run (prod):  uvicorn backend.traffic_api:app --host 0.0.0.0 --port 10000
 """
 
 import io
+import os
 import cv2
 import numpy as np
 from datetime import datetime
@@ -16,8 +18,8 @@ from ultralytics import YOLO
 # ============================================================
 # GLOBAL STORAGE
 # ============================================================
-vehicle_records = {}       # toll vehicle live tracking
-toll_history = []          # log history for dashboard
+vehicle_records = {}
+toll_history = []
 
 current_status = {
     "vehicle_count": 0,
@@ -39,7 +41,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ============================================================
 # MODELS
 # ============================================================
@@ -49,13 +50,17 @@ class VehicleEntry(BaseModel):
 class VehicleExit(BaseModel):
     vehicle_number: str
 
-
 # ============================================================
 # YOLO TRAFFIC ANALYZER
 # ============================================================
 class TrafficAnalyzer:
-    def __init__(self, model_path='yolov8n.pt'):
+    def __init__(self, model_path=None):
         print("Loading YOLO Model...")
+
+        if model_path is None:
+            base_dir = os.path.dirname(__file__)
+            model_path = os.path.join(base_dir, "yolov8n.pt")
+
         self.model = YOLO(model_path)
 
         self.vehicle_classes = {
@@ -99,14 +104,12 @@ class TrafficAnalyzer:
 
 analyzer = TrafficAnalyzer()
 
-
 # ============================================================
 # ROOT
 # ============================================================
 @app.get("/")
 async def root():
     return {"message": "TrafficAI Backend Running 🚦"}
-
 
 # ============================================================
 # TRAFFIC ANALYZE API
@@ -130,14 +133,12 @@ async def analyze_traffic(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(400, f"Image Error: {str(e)}")
 
-
 # ============================================================
-# TOLL FUNCTION USED BY AI + FRONTEND
+# TOLL FUNCTION
 # ============================================================
 def handle_toll(vehicle_number):
     current_time = datetime.now()
 
-    # ENTRY
     if vehicle_number not in vehicle_records:
         vehicle_records[vehicle_number] = current_time
 
@@ -158,7 +159,6 @@ def handle_toll(vehicle_number):
             "entry_time": str(current_time)
         }
 
-    # EXIT
     entry = vehicle_records[vehicle_number]
     travel = (current_time - entry).total_seconds() / 60
 
@@ -194,9 +194,8 @@ def handle_toll(vehicle_number):
 
     return data
 
-
 # ============================================================
-# AI TOLL API (FIXED)
+# AI TOLL API
 # ============================================================
 @app.post("/ai/toll")
 async def ai_toll_update(data: dict = Body(...)):
@@ -207,25 +206,20 @@ async def ai_toll_update(data: dict = Body(...)):
 
     return handle_toll(vehicle_number)
 
-
 # ============================================================
-# DASHBOARD LIVE STATUS
+# DASHBOARD STATUS
 # ============================================================
 @app.get("/status")
 async def get_status():
     return current_status
 
-
 @app.get("/toll-history")
 async def toll_history_api():
     return toll_history
 
-
 # ============================================================
-# FRONTEND UPDATER
+# FRONTEND STATUS UPDATE
 # ============================================================
-from fastapi import Body
-
 @app.post("/update-status")
 async def update_status(data: dict = Body(...)):
     global current_status
@@ -234,5 +228,3 @@ async def update_status(data: dict = Body(...)):
     current_status["last_plate"] = data.get("last_plate", current_status["last_plate"])
     current_status["toll_status"] = data.get("toll_status", current_status["toll_status"])
     return {"message": "Status updated", "data": current_status}
-
-
