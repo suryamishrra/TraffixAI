@@ -11,3 +11,4 @@ ai/yolov8n.pt
 node_modules
 .env
 
+TraffixAI-HF/
