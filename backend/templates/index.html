@@ -2,29 +2,101 @@
 <html>
 <head>
     <title>TrafficAI 🚦</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
     <style>
-        body { font-family: Arial; text-align: center; margin-top: 50px; }
-        button { padding: 10px 20px; background: black; color: white; border: none; }
-        .result { margin-top: 30px; font-size: 18px; }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 40px;
+            font-size: 40px;
+            background: linear-gradient(90deg, #00f5ff, #ff00c8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            margin-top: 40px;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            background: #1e293b;
+            color: white;
+            border-radius: 8px;
+            border: none;
+        }
+
+        button {
+            padding: 12px 25px;
+            margin-top: 20px;
+            border-radius: 10px;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            background: linear-gradient(90deg, #00f5ff, #ff00c8);
+            color: black;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        .card {
+            margin: 40px auto;
+            padding: 30px;
+            width: 350px;
+            border-radius: 20px;
+            background: #1e293b;
+            box-shadow: 0 0 30px rgba(0,255,255,0.2);
+        }
+
+        .status-normal { color: #22c55e; }
+        .status-moderate { color: #facc15; }
+        .status-heavy { color: #ef4444; }
+
+        .big-number {
+            font-size: 50px;
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
 
 <h1>🚦 TrafficAI Vehicle Detection</h1>
 
-<form id="uploadForm">
-    <input type="file" id="fileInput" required>
-    <br><br>
-    <button type="submit">Analyze Traffic</button>
-</form>
+<div class="container">
+    <input type="file" id="imageInput">
+    <br>
+    <button onclick="analyze()">Analyze Traffic</button>
+</div>
 
-<div class="result" id="result"></div>
+<div class="card" id="resultCard" style="display:none;">
+    <h2>Results</h2>
+    <div class="big-number" id="total"></div>
+    <p id="details"></p>
+    <h3 id="status"></h3>
+</div>
 
 <script>
-document.getElementById("uploadForm").onsubmit = async function(e) {
-    e.preventDefault();
-    
-    const file = document.getElementById("fileInput").files[0];
+async function analyze() {
+    const fileInput = document.getElementById("imageInput");
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert("Upload an image first!");
+        return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -35,16 +107,28 @@ document.getElementById("uploadForm").onsubmit = async function(e) {
 
     const data = await response.json();
 
-    document.getElementById("result").innerHTML = `
-        <h3>Results:</h3>
-        Total Vehicles: ${data.total_vehicles} <br>
-        Cars: ${data.cars} <br>
-        Bikes: ${data.bikes} <br>
-        Buses: ${data.buses} <br>
-        Trucks: ${data.trucks} <br>
-        Traffic Status: <b>${data.traffic_status}</b>
-    `;
-};
+    document.getElementById("resultCard").style.display = "block";
+    document.getElementById("total").innerHTML = data.total_vehicles;
+
+    document.getElementById("details").innerHTML =
+        "Cars: " + data.cars +
+        " | Bikes: " + data.bikes +
+        " | Buses: " + data.buses +
+        " | Trucks: " + data.trucks;
+
+    const statusEl = document.getElementById("status");
+    statusEl.innerHTML = "Traffic Status: " + data.traffic_status;
+
+    statusEl.className = "";
+
+    if (data.traffic_status === "Normal") {
+        statusEl.classList.add("status-normal");
+    } else if (data.traffic_status === "Moderate") {
+        statusEl.classList.add("status-moderate");
+    } else {
+        statusEl.classList.add("status-heavy");
+    }
+}
 </script>
 
 </body>
