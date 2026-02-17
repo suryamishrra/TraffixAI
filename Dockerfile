@@ -2,6 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Copy requirements first (better caching)
 COPY requirements.txt .
 
 RUN apt-get update && apt-get install -y \
@@ -13,10 +14,12 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
+# Copy full project
 COPY . .
 
-EXPOSE 10000
+# Expose HF default port
+EXPOSE 7860
 
-CMD ["uvicorn", "backend.traffic_api:app", "--host", "0.0.0.0", "--port", "10000"]
-
+# Start FastAPI
+CMD ["uvicorn", "backend.traffic_api:app", "--host", "0.0.0.0", "--port", "7860"]
 
