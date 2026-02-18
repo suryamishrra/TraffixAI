@@ -2,7 +2,13 @@
 
 import axios from "axios";
 import { useEffect, useState } from "react";
-import { Car, Activity, CreditCard, Camera, UploadCloud } from "lucide-react";
+import {
+  Car,
+  Activity,
+  CreditCard,
+  Camera,
+  UploadCloud
+} from "lucide-react";
 
 const BASE_URL = "https://suryamishrra-traffix-ai.hf.space";
 
@@ -20,6 +26,7 @@ export default function Home() {
   const [cameraOn, setCameraOn] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // ================= DASHBOARD FETCH =================
   const fetchData = async () => {
     try {
       const res = await axios.get(`${BASE_URL}/status`);
@@ -32,13 +39,13 @@ export default function Home() {
     } catch {}
   };
 
-  // Reduced polling (performance fix)
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, []);
 
+  // ================= IMAGE UPLOAD =================
   const handleUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -51,6 +58,14 @@ export default function Home() {
     try {
       const res = await axios.post(`${BASE_URL}/analyze`, formData);
       setAnalysis(res.data);
+
+      // simulate toll entry
+      await axios.post(`${BASE_URL}/ai/toll`, {
+        plate: "DL01AB1234"
+      });
+
+      fetchData();
+
     } catch {
       alert("Upload failed.");
     }
@@ -58,6 +73,7 @@ export default function Home() {
     setLoading(false);
   };
 
+  // ================= VIDEO UPLOAD =================
   const handleVideoUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -72,6 +88,62 @@ export default function Home() {
       setAnalysis(res.data);
     } catch {
       alert("Video upload failed.");
+    }
+
+    setLoading(false);
+  };
+
+  // ================= CAMERA START =================
+  const startCamera = async () => {
+    setCameraOn(true);
+    const video = document.getElementById("cam") as HTMLVideoElement;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+  };
+
+  // ================= CAMERA STOP =================
+  const stopCamera = () => {
+    const video = document.getElementById("cam") as HTMLVideoElement;
+    const stream = video?.srcObject as MediaStream;
+    stream?.getTracks().forEach(track => track.stop());
+    setCameraOn(false);
+  };
+
+  // ================= CAMERA CAPTURE + ANALYZE =================
+  const captureAndAnalyze = async () => {
+    const video = document.getElementById("cam") as HTMLVideoElement;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx?.drawImage(video, 0, 0);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg")
+    );
+
+    if (!blob) return;
+
+    const formData = new FormData();
+    formData.append("file", blob, "frame.jpg");
+
+    setLoading(true);
+
+    try {
+      const res = await axios.post(`${BASE_URL}/analyze`, formData);
+      setAnalysis(res.data);
+
+      // simulate toll entry
+      await axios.post(`${BASE_URL}/ai/toll`, {
+        plate: "DL99XY0001"
+      });
+
+      fetchData();
+
+    } catch {
+      alert("Camera analysis failed.");
     }
 
     setLoading(false);
@@ -94,32 +166,18 @@ export default function Home() {
       {/* IMAGE UPLOAD */}
       <h2 className="text-2xl font-bold mt-12 mb-4">Analyze Image</h2>
 
-      <div className="bg-gray-900 border border-gray-700 p-6 rounded-2xl shadow-lg">
-        <label className="flex items-center gap-3 cursor-pointer bg-gray-800 hover:bg-gray-700 px-5 py-3 rounded-xl w-fit transition">
+      <div className="bg-gray-900 border border-gray-700 p-6 rounded-2xl">
+        <label className="flex items-center gap-3 cursor-pointer bg-gray-800 hover:bg-gray-700 px-5 py-3 rounded-xl w-fit">
           <UploadCloud size={20}/>
-          <span>Upload Image</span>
-          <input type="file" className="hidden" onChange={handleUpload}/>
+          Upload Image
+          <input type="file" hidden onChange={handleUpload}/>
         </label>
 
         {loading && <p className="mt-4 text-yellow-400">Processing...</p>}
-
-        {analysis && (
-          <div className="mt-6 space-y-2 text-lg">
-            <p>Total Vehicles: {analysis.total_vehicles}</p>
-            <p>Cars: {analysis.cars}</p>
-            <p>Bikes: {analysis.bikes}</p>
-            <p>Buses: {analysis.buses}</p>
-            <p>Trucks: {analysis.trucks}</p>
-            <p className="font-bold text-xl mt-3">
-              Traffic Status: {analysis.traffic_status}
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* VIDEO UPLOAD */}
+      {/* VIDEO */}
       <h2 className="text-2xl font-bold mt-10 mb-3">Analyze Video</h2>
-
       <div className="bg-gray-900 border border-gray-700 p-6 rounded-2xl">
         <input type="file" accept="video/*" onChange={handleVideoUpload}/>
       </div>
@@ -128,45 +186,41 @@ export default function Home() {
       <h2 className="text-2xl font-bold mt-10 mb-3">Live Camera</h2>
 
       <div className="bg-gray-900 border border-gray-700 p-6 rounded-2xl">
-
-        <button
-          className="bg-blue-600 px-4 py-2 rounded-xl mr-3"
-          onClick={async () => {
-            setCameraOn(true);
-            const video = document.getElementById("cam") as HTMLVideoElement;
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            video.srcObject = stream;
-          }}
-        >
+        <button className="bg-blue-600 px-4 py-2 rounded-xl mr-3" onClick={startCamera}>
           Start Camera
         </button>
 
-        <button
-          className="bg-red-600 px-4 py-2 rounded-xl"
-          onClick={() => {
-            const video = document.getElementById("cam") as HTMLVideoElement;
-            const stream = video?.srcObject as MediaStream;
-            stream?.getTracks().forEach(track => track.stop());
-            setCameraOn(false);
-          }}
-        >
+        <button className="bg-red-600 px-4 py-2 rounded-xl mr-3" onClick={stopCamera}>
           Stop Camera
         </button>
 
-        {cameraOn && (
-          <video
-            id="cam"
-            autoPlay
-            className="mt-4 rounded-xl w-full max-w-md"
-          />
-        )}
+        <button className="bg-green-600 px-4 py-2 rounded-xl" onClick={captureAndAnalyze}>
+          Capture & Analyze
+        </button>
 
+        {cameraOn && (
+          <video id="cam" autoPlay className="mt-4 rounded-xl w-full max-w-md"/>
+        )}
       </div>
+
+      {/* ANALYSIS RESULT */}
+      {analysis && (
+        <div className="mt-6 bg-gray-900 p-6 rounded-2xl space-y-2">
+          <p>Total Vehicles: {analysis.total_vehicles}</p>
+          <p>Cars: {analysis.cars}</p>
+          <p>Bikes: {analysis.bikes}</p>
+          <p>Buses: {analysis.buses}</p>
+          <p>Trucks: {analysis.trucks}</p>
+          <p className="font-bold text-xl">
+            Traffic Status: {analysis.traffic_status}
+          </p>
+        </div>
+      )}
 
       {/* TOLL HISTORY */}
       <h2 className="text-2xl font-bold mt-12 mb-4">Toll History</h2>
 
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden shadow-lg">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-800 text-gray-400">
             <tr>
@@ -178,7 +232,7 @@ export default function Home() {
           </thead>
           <tbody>
             {history.map((h: any, idx) => (
-              <tr key={idx} className="border-t border-gray-700 hover:bg-gray-800 transition">
+              <tr key={idx} className="border-t border-gray-700 hover:bg-gray-800">
                 <td className="p-3">{h.vehicle_number}</td>
                 <td className="p-3">{h.entry_time}</td>
                 <td className="p-3">{h.exit_time || "—"}</td>
@@ -195,9 +249,9 @@ export default function Home() {
 
 function Card({ title, value, icon }: any) {
   return (
-    <div className="bg-gray-900 border border-gray-700 p-6 rounded-2xl shadow-xl hover:scale-105 transition">
+    <div className="bg-gray-900 border border-gray-700 p-6 rounded-2xl hover:scale-105 transition">
       <div className="flex justify-between">
-        <h2 className="text-lg">{title}</h2>
+        <h2>{title}</h2>
         {icon}
       </div>
       <p className="text-3xl font-bold mt-3">{value}</p>
