@@ -200,3 +200,64 @@ async def get_status():
 @app.get("/toll-history")
 async def toll_history_api():
     return toll_history
+
+
+# ============================================================
+# VIDEO ANALYZE API
+# ============================================================
+@app.post("/analyze-video")
+async def analyze_video(file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+
+        temp_path = "temp_video.mp4"
+        with open(temp_path, "wb") as f:
+            f.write(contents)
+
+        cap = cv2.VideoCapture(temp_path)
+
+        total_counts = {
+            "cars": 0,
+            "bikes": 0,
+            "buses": 0,
+            "trucks": 0
+        }
+
+        frame_skip = 5
+        frame_id = 0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_id % frame_skip == 0:
+                result = analyzer.analyze_image(frame)
+
+                total_counts["cars"] += result.get("cars", 0)
+                total_counts["bikes"] += result.get("bikes", 0)
+                total_counts["buses"] += result.get("buses", 0)
+                total_counts["trucks"] += result.get("trucks", 0)
+
+            frame_id += 1
+
+        cap.release()
+        os.remove(temp_path)
+
+        total = sum(total_counts.values())
+
+        if total < 10:
+            status = "Normal"
+        elif total < 30:
+            status = "Moderate"
+        else:
+            status = "Heavy"
+
+        return {
+            "total_vehicles": total,
+            **total_counts,
+            "traffic_status": status
+        }
+
+    except Exception as e:
+        raise HTTPException(400, f"Video Error: {str(e)}")
