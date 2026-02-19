@@ -7,6 +7,7 @@ import io
 import os
 import cv2
 import numpy as np
+import tempfile
 from datetime import datetime
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -177,7 +178,7 @@ def handle_toll(vehicle_number):
     current_status["toll_status"] = "Exit Completed"
     current_status["vehicle_count"] -= 1
 
-    return {
+    exit_data = {
         "status": "exit_completed",
         "vehicle_number": vehicle_number,
         "entry_time": str(entry),
@@ -186,12 +187,31 @@ def handle_toll(vehicle_number):
         "toll_amount": toll
     }
 
+    toll_history.append({
+        "vehicle_number": vehicle_number,
+        "entry_time": str(entry),
+        "exit_time": str(current_time),
+        "status": "Exit",
+        "toll_amount": toll
+    })
+
+    return exit_data
+
 @app.post("/ai/toll")
 async def ai_toll_update(data: dict = Body(...)):
     vehicle_number = data.get("plate")
     if not vehicle_number:
         raise HTTPException(400, "Plate not provided")
     return handle_toll(vehicle_number)
+
+
+@app.post("/update-status")
+async def update_status(data: dict = Body(...)):
+    current_status["vehicle_count"] = data.get("vehicle_count", current_status["vehicle_count"])
+    current_status["traffic_status"] = data.get("traffic_status", current_status["traffic_status"])
+    current_status["last_plate"] = data.get("last_plate", current_status["last_plate"])
+    current_status["toll_status"] = data.get("toll_status", current_status["toll_status"])
+    return {"message": "Status updated", "data": current_status}
 
 @app.get("/status")
 async def get_status():
@@ -207,14 +227,19 @@ async def toll_history_api():
 # ============================================================
 @app.post("/analyze-video")
 async def analyze_video(file: UploadFile = File(...)):
+    temp_path = None
     try:
         contents = await file.read()
+        if not contents:
+            raise HTTPException(400, "Video file is empty")
 
-        temp_path = "temp_video.mp4"
-        with open(temp_path, "wb") as f:
-            f.write(contents)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+            temp_path = temp_file.name
+            temp_file.write(contents)
 
         cap = cv2.VideoCapture(temp_path)
+        if not cap.isOpened():
+            raise HTTPException(400, "Unable to decode video. Try MP4 (H.264) format.")
 
         total_counts = {
             "cars": 0,
@@ -225,6 +250,7 @@ async def analyze_video(file: UploadFile = File(...)):
 
         frame_skip = 5
         frame_id = 0
+        processed_frames = 0
 
         while True:
             ret, frame = cap.read()
@@ -238,11 +264,14 @@ async def analyze_video(file: UploadFile = File(...)):
                 total_counts["bikes"] += result.get("bikes", 0)
                 total_counts["buses"] += result.get("buses", 0)
                 total_counts["trucks"] += result.get("trucks", 0)
+                processed_frames += 1
 
             frame_id += 1
 
         cap.release()
-        os.remove(temp_path)
+
+        if processed_frames == 0:
+            raise HTTPException(400, "No readable frames found in video.")
 
         total = sum(total_counts.values())
 
@@ -256,8 +285,14 @@ async def analyze_video(file: UploadFile = File(...)):
         return {
             "total_vehicles": total,
             **total_counts,
-            "traffic_status": status
+            "traffic_status": status,
+            "processed_frames": processed_frames
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(400, f"Video Error: {str(e)}")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
